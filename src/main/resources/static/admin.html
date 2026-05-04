@@ -1,0 +1,171 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Admin Panel</title>
+
+<script src="https://cdn.jsdelivr.net/npm/sockjs-client@1/dist/sockjs.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/stompjs@2.3.3/lib/stomp.min.js"></script>
+
+<style>
+body {
+    font-family: Arial;
+    background: #0f172a;
+    color: white;
+    padding: 20px;
+}
+
+h2 { color: #38bdf8; }
+
+.card {
+    background: #1e293b;
+    padding: 15px;
+    border-radius: 10px;
+    margin-bottom: 15px;
+}
+
+button {
+    padding: 10px 16px;
+    margin: 5px;
+    border: none;
+    background: linear-gradient(135deg, #38bdf8, #0ea5e9);
+    color: white;
+    border-radius: 8px;
+    cursor: pointer;
+    transition: all 0.25s ease;
+}
+
+button:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 6px 15px rgba(56,189,248,0.4);
+}
+
+button:active {
+    transform: scale(0.95);
+}
+
+input {
+    padding: 8px;
+    border-radius: 5px;
+    border: none;
+}
+
+input:focus {
+    outline: none;
+    box-shadow: 0 0 10px #38bdf8;
+}
+
+li { margin: 8px 0; }
+</style>
+</head>
+
+<body>
+
+<h2>👨‍💼 Admin Dashboard</h2>
+
+<div class="card">
+    <h3 id="stats">Loading...</h3>
+</div>
+
+<div class="card">
+    <h3 id="current">Now Serving: None</h3>
+</div>
+
+<div class="card">
+    <ul id="list"></ul>
+</div>
+
+<div class="card">
+    <input id="serviceInput" placeholder="Service Time (min)">
+    <button onclick="setService()">Set Time</button>
+</div>
+
+<div class="card">
+    <button onclick="next()">Next</button>
+    <button onclick="reset()">Reset</button>
+</div>
+
+<script>
+// 🔥 IMPORTANT FIX (DEPLOY SAFE)
+let socket = new SockJS(window.location.origin + '/ws');
+let stomp = Stomp.over(socket);
+
+stomp.connect({}, () => {
+
+    stomp.subscribe('/topic/queue', (msg) => {
+
+        let queue = JSON.parse(msg.body);
+
+        let html = "";
+        queue.forEach(u => {
+            html += `<li>🔹 ${u.name} - ${formatTime(u.waitTime)}</li>`;
+        });
+
+        document.getElementById("list").innerHTML = html;
+        loadStats();
+    });
+
+    loadCurrent();
+    loadStats();
+});
+
+// 🔥 STATS
+function loadStats() {
+    fetch(window.location.origin + '/queue/stats')
+    .then(res => res.json())
+    .then(data => {
+        document.getElementById("stats").innerText =
+            `📊 Served: ${data.totalServed} | 👥 Queue: ${data.queueSize}`;
+    });
+}
+
+// 🔥 SET SERVICE TIME + CLEAR INPUT
+function setService() {
+
+    let input = document.getElementById("serviceInput");
+    let time = input.value;
+
+    if (!time) {
+        alert("Enter time");
+        return;
+    }
+
+    fetch(`${window.location.origin}/queue/service-time?time=${time}`, {
+        method:'POST'
+    }).then(() => {
+        input.value = ""; // clear
+    });
+}
+
+// 🔹 NEXT
+function next() {
+    fetch(`${window.location.origin}/queue/next`, {method:'POST'})
+    .then(loadCurrent);
+}
+
+// 🔹 RESET
+function reset() {
+    fetch(`${window.location.origin}/queue/reset`, {method:'POST'})
+    .then(loadStats);
+}
+
+// 🔹 CURRENT
+function loadCurrent() {
+    fetch(window.location.origin + '/queue/current')
+    .then(res => res.json())
+    .then(data => {
+        document.getElementById("current").innerText =
+            data ? `Now Serving: ${data.name}` : "None";
+    });
+}
+
+// 🔥 TIME FORMAT (clean)
+function formatTime(s) {
+    let m = Math.floor(s/60);
+    let sec = s%60;
+    return `${m}m ${sec}s`;
+}
+</script>
+
+</body>
+</html>
